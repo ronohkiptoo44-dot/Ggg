@@ -1,0 +1,134 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function: Check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function: Check if the user is operating on their own document/data
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Helper function: Check if the user is a participant of a specific conversation
+    function isChatParticipant(chatId) {
+      return isAuthenticated() && 
+        request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+    }
+
+    // ==========================================
+    // 1. USER PROFILES
+    // ==========================================
+    match /users/{userId} {
+      // Users can view any user profile to establish contacts, but can only mutate their own profile
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+      
+      // ==========================================
+      // 1B. USER PRIVATE SETTINGS (Nested Subcollection)
+      // ==========================================
+      match /settings/{settingId} {
+        // Only the account owner can view/edit their own personalization & privacy configurations
+        allow read, write: if isOwner(userId);
+      }
+      
+      // ==========================================
+      // 1C. USER CONTACTS (Nested Subcollection)
+      // ==========================================
+      match /contacts/{contactId} {
+        // Only the user themselves can read, modify, or add contacts in their address book
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // ==========================================
+    // 2. ROOT SETTINGS (Alternative Flat Structure)
+    // ==========================================
+    match /settings/{settingId} {
+      // If settings are stored in a top-level collection mapped by userId
+      allow read, write: if isAuthenticated() && (settingId == request.auth.uid || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+
+    // ==========================================
+    // 3. CONVERSATIONS & CHATS
+    // ==========================================
+    match /chats/{chatId} {
+      // A participant can read or modify the chat details if their UID is in the participants list
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      
+      // For updates, make sure the user is in both the existing participants list AND they cannot maliciously alter participant array to lock others out
+      allow update: if isAuthenticated() && 
+        request.auth.uid in resource.data.participants &&
+        request.resource.data.participants.hasAll([request.auth.uid]);
+        
+      // To create a chat, the initiator must be listed as a participant in the prospective list
+      allow create: if isAuthenticated() && request.resource.data.participants.hasAll([request.auth.uid]);
+      
+      // Only members can delete the channel metadata
+      allow delete: if isAuthenticated() && request.auth.uid in resource.data.participants;
+
+      // ==========================================
+      // 3B. MESSAGES SUBCOLLECTION
+      // ==========================================
+      match /messages/{messageId} {
+        // A user can read messages if they are part of the parent conversation
+        allow read: if isAuthenticated() && 
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        
+        // A user can send/create a message if they are part of the chat, and set themselves as the sender
+        allow create: if isAuthenticated() && 
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants &&
+          request.resource.data.senderId == request.auth.uid;
+          
+        // Users can edit or delete their own messages (e.g. self-destruct mechanism)
+        allow update, delete: if isAuthenticated() && 
+          (resource.data.senderId == request.auth.uid || 
+           request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants);
+      }
+    }
+
+    // ==========================================
+    // 4. GROUPS
+    // ==========================================
+    match /groups/{groupId} {
+      // Group details are readable and writeable by members of the group
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.members;
+      
+      // Only current members can update group definitions and members list
+      allow update: if isAuthenticated() && 
+        request.auth.uid in resource.data.members &&
+        request.resource.data.members.hasAll([request.auth.uid]);
+        
+      // Create is allowed if the creator lists themselves in the group elements
+      allow create: if isAuthenticated() && request.resource.data.members.hasAll([request.auth.uid]);
+      allow delete: if isAuthenticated() && request.auth.uid in resource.data.members;
+
+      // ==========================================
+      // 4B. GROUP MESSAGES SUBCOLLECTION
+      // ==========================================
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && 
+          request.auth.uid in get(/databases/$(database)/documents/groups/{groupId}).data.members;
+          
+        allow create: if isAuthenticated() && 
+          request.auth.uid in get(/databases/$(database)/documents/groups/{groupId}).data.members &&
+          request.resource.data.senderId == request.auth.uid;
+          
+        allow update, delete: if isAuthenticated() && 
+          resource.data.senderId == request.auth.uid;
+      }
+    }
+    
+    // ==========================================
+    // 5. GLOBAL CONFIGURATIONS (Read-only)
+    // ==========================================
+    match /global_config/{configId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // System configs are readonly for clients
+    }
+  }
+}

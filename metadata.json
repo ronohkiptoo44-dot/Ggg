@@ -1,0 +1,6 @@
+{
+  "name": "SimChat",
+  "description": "Production Ready Android Hybrid Messaging Platform with SMS & Supabase Realtime",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

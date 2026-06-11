@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "366450612842",
+    "project_id": "simchat-e304d",
+    "storage_bucket": "simchat-e304d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:366450612842:android:94f30259c8145209bec813",
+        "android_client_info": {
+          "package_name": "com.aistudio.simchat.pxgsq"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAzWziArT76EwU7K8Q-vZkwnfnG0CZCkPk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
